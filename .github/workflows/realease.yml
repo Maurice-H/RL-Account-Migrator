@@ -41,22 +41,22 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          python - <<END
+          python -c "
           import toml, os
 
-          py = toml.load("pyproject.toml")
-          version = py["tool"]["poetry"]["version"]
+          py = toml.load('pyproject.toml')
+          version = py['tool']['poetry']['version']
           major, minor, patch = map(int, version.split('.'))
 
           # Schreibe Outputs für GitHub Actions
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-          f.write(f"version={version}\n")
-          f.write(f"major={major}\n")
-          f.write(f"minor={minor}\n")
-          f.write(f"patch={patch}\n")
+          f.write(f'version={version}\n')
+          f.write(f'major={major}\n')
+          f.write(f'minor={minor}\n')
+          f.write(f'patch={patch}\n')
 
           # version.txt für PyInstaller erstellen
-          version_txt = f"""
+          version_txt = f'''
           VSVersionInfo(
             ffi=FixedFileInfo(
               filevers=({major},{minor},{patch},0),
@@ -86,10 +86,10 @@ jobs:
               VarFileInfo([VarStruct('Translation', [1033, 1200])])
             ]
           )
-          """
-          with open("version.txt", "w", encoding="utf-8") as f:
+          '''
+          with open('version.txt', 'w', encoding='utf-8') as f:
               f.write(version_txt)
-          END
+              "
 
       - name: Build EXE with PyInstaller
         run: |
