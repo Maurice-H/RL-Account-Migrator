@@ -88,12 +88,10 @@ class RLMainWindow(QMainWindow):
 
         self.home_tab = HomeTab(self.navigate_to_tab)
         self.setup_tab = SetupTab(self.rl_manager)
-        self.skip_tab = SkipIntroTab(self.rl_manager)
         self.migrate_tab = MigrateSettingsTab(self.rl_manager)
 
         self.tabs.addTab(self.home_tab, "Home")
         self.tabs.addTab(self.setup_tab, "Set Up")
-        self.tabs.addTab(self.skip_tab, "Skip Intro")
         self.tabs.addTab(self.migrate_tab, "Migrate Settings")
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
@@ -139,18 +137,14 @@ class HomeTab(QWidget):
         layoutH = QHBoxLayout()
         layoutH.setSpacing(16)
         layoutH.addStretch()
-        btn_skip = QPushButton("Skip Intro")
-        btn_skip.setFixedWidth(160)
         btn_migrate = QPushButton("Migrate Settings")
         btn_migrate.setFixedWidth(160)
-        layoutH.addWidget(btn_skip)
         layoutH.addWidget(btn_migrate)
         layoutH.addStretch()
         layout.addLayout(layoutH)
 
         btn_setup.clicked.connect(lambda: navigate_callback(1))
-        btn_skip.clicked.connect(lambda: navigate_callback(2))
-        btn_migrate.clicked.connect(lambda: navigate_callback(3))
+        btn_migrate.clicked.connect(lambda: navigate_callback(2))
 
 # --- Setup Tab ---
 class SetupTab(RequiresSetupTab):
@@ -361,79 +355,14 @@ class SetupTab(RequiresSetupTab):
             show_error(self, err)
             return
         copied = self.rl_manager.duplicate_save()
-        if copied:
+        if isinstance(copied, list):
             names = [os.path.basename(p) for p in copied]
             QMessageBox.information(self, "Info", "Saved backups:\n" + "\n".join(names))
+        elif isinstance(copied, str):
+            show_error(self, copied)
+            return
         else:
             QMessageBox.information(self, "Info", "No saves found to back up.")
-
-# --- Skip Intro Tab ---
-class SkipIntroTab(RequiresSetupTab):
-    def __init__(self, rl_manager: RLManager):
-        super().__init__(rl_manager)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        container = QWidget()
-        scroll.setWidget(container)
-        main = QVBoxLayout(container)
-        main.setContentsMargins(18,18,18,18)
-        main.setSpacing(12)
-        main.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        instr_card = card_frame_widget(
-            "Skip Intro",
-            "Start Rocket League with the new account. The tool will wait for the game to create new .save files and then replace them with your backed up saves."
-        )
-        main.addWidget(instr_card)
-
-        self.btn_skip = QPushButton("Skip Intro")
-        self.btn_skip.setFixedWidth(200)
-        main.addWidget(self.btn_skip, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        self.status_label = QLabel("Status: -")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: #d0d0d8;")
-        main.addWidget(self.status_label)
-
-        outer = QVBoxLayout(self)
-        outer.addWidget(scroll)
-
-        self.btn_skip.clicked.connect(self.run_skip_intro)
-        self.check_for_set_up()
-
-    def check_for_set_up(self):
-        ready = bool(self.rl_manager.save_path and self.rl_manager.backup_path and self.rl_manager.rocket_league_path)
-        self.btn_skip.setEnabled(ready)
-        if not ready:
-            self.status_label.setText("Status: Please finish setup first.")
-            self.status_label.setStyleSheet("color: #f0b36b;")
-        else:
-            self.status_label.setText("Status: Ready")
-            self.status_label.setStyleSheet("color: #86d07f;")
-
-    def log_status(self, text: str, color: str = "#d0d0d8"):
-        self.status_label.setText(text)
-        self.status_label.setStyleSheet(f"color: {color};")
-        QApplication.processEvents()
-
-    def run_skip_intro(self):
-        err = self.rl_manager.check_folder_paths_set()
-        if err:
-            show_error(self, err)
-            return
-        self.log_status("Starting Rocket League and waiting for new save files...", "#f0c36b")
-        try:
-            ok = self.rl_manager.generate_new_save_files(timeout=180)
-            if ok:
-                self.log_status("Skip Intro completed — backup replaced.", "#86d07f")
-                QMessageBox.information(self, "Done", "Skip Intro completed.")
-            else:
-                self.log_status("Skip Intro did not complete.", "#d97777")
-                QMessageBox.information(self, "Info", "Skip Intro did not complete.")
-        except Exception as e:
-            self.log_status("Error occurred.", "#d97777")
-            show_error(self, str(e))
 
 # --- Migrate Settings Tab ---
 class MigrateSettingsTab(RequiresSetupTab):
@@ -450,8 +379,8 @@ class MigrateSettingsTab(RequiresSetupTab):
         main.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         instr_card = card_frame_widget(
-            "Migrate Settings",
-            "Copy settings from your primary account to the new account save. Ensure both save files are present and that you have backed up your originals."
+            "Migrate Settings & Skip Intro",
+            "Copy settings from your primary account saves to the new account."
         )
         main.addWidget(instr_card)
 
@@ -490,12 +419,15 @@ class MigrateSettingsTab(RequiresSetupTab):
         if err:
             show_error(self, err)
             return
-        self.log_status("Restoring backup files...", "#f0c36b")
-        latest = self.rl_manager.latest_saves()
-        if latest:
-            self.rl_manager.restore_backup(os.path.basename(latest[0]))
-            self.log_status("Settings migrated successfully!", "#86d07f")
-            QMessageBox.information(self, "Done", "Settings migrated successfully.")
-        else:
-            self.log_status("No saves found to migrate.", "#d97777")
-            QMessageBox.information(self, "Info", "No saves found to migrate.")
+        self.log_status("Starting Rocket League and waiting for new save files...", "#f0c36b")
+        try:
+            ok = self.rl_manager.generate_new_save_files()
+            if ok:
+                self.log_status("Settings migrated successfully!", "#86d07f")
+                QMessageBox.information(self, "Done", "Settings migrated successfully.")
+            else:
+                self.log_status("No saves found to migrate.", "#d97777")
+                QMessageBox.information(self, "Info", "No saves found to migrate.")
+        except Exception as e:
+            self.log_status("Error occurred.", "#d97777")
+            show_error(self, str(e))
