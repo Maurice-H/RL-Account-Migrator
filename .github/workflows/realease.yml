@@ -63,6 +63,9 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download EXE artifact
         uses: actions/download-artifact@v4
         with:
