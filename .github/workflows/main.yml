@@ -27,7 +27,7 @@ jobs:
 
       - name: Build Portable EXE
         run: |
-          pyinstaller --onefile --noconsole --name RLAccountMigrator main.py
+          pyinstaller --onefile --noconsole --name RLAccountMigrator  src/main.py
 
       - name: Upload EXE as artifact
         uses: actions/upload-artifact@v4
