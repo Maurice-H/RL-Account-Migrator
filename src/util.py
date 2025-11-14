@@ -44,12 +44,17 @@ class RLManager:
         latest_list = self.latest_saves()
         if latest_list:
             # Dupliziere die **neusten** Datei aus der Liste
-            for latest in latest_list:
-                copy_target = os.path.join(self.backup_path, os.path.basename(latest))
-                shutil.copy2(latest, copy_target)
-            return latest_list
+            existing_files = glob.glob(os.path.join(self.backup_path, "*.save"))
+            if len(existing_files) == 0:
+                for latest in latest_list:
+                    copy_target = os.path.join(self.backup_path, os.path.basename(latest))
+                    shutil.copy2(latest, copy_target)
+                return latest_list
+            else:
+                error = "Backup folder is not empty! Please clear it before creating a new backup."
+                return error 
         return None
-    def wait_for_new_latest_save(self, timeout=60):
+    def wait_for_new_latest_save(self, timeout=30):
         # vorhandene Base-IDs merken
         existing_files = glob.glob(os.path.join(self.save_path, "*.save"))
         existing_bases = set()
@@ -82,7 +87,7 @@ class RLManager:
 
             time.sleep(2)
 
-        raise TimeoutError("No new .save files found within timeout.")
+        return self.latest_saves()
 
     def get_base_name(self, filename):
         match = re.match(r"([a-f0-9]+)(?:_\d+)?\.save$", os.path.basename(filename))
@@ -98,7 +103,7 @@ class RLManager:
         for f in os.listdir(self.backup_path):
             shutil.copy2(os.path.join(self.backup_path, f), os.path.join(self.save_path, base_name + f[len(base_name):]))
 
-    def generate_new_save_files(self, timeout=180):
+    def generate_new_save_files(self):
         if not (self.rocket_league_path and os.path.exists(self.rocket_league_path)):
             return False
 
@@ -107,7 +112,7 @@ class RLManager:
 
         try:
             # Warten bis neue Save-Dateien erstellt werden
-            latest_files = self.wait_for_new_latest_save(timeout=timeout)
+            latest_files = self.wait_for_new_latest_save(timeout=60)
             if not latest_files:
                 return False
 
