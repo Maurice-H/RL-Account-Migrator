@@ -27,13 +27,16 @@ jobs:
 
       - name: Build Portable EXE
         run: |
-          pyinstaller --onefile --noconsole --name RLAccountMigrator  src/main.py
+          pyinstaller --onefile --noconsole --name RLAccountMigrator src/main.py
+
+      - name: Copy EXE to root for release
+        run: copy dist\RLAccountMigrator.exe RLAccountMigrator.exe
 
       - name: Upload EXE as artifact
         uses: actions/upload-artifact@v4
         with:
           name: RLAccountMigrator-exe
-          path: dist/RLAccountMigrator.exe
+          path: RLAccountMigrator.exe
 
   release:
     name: Create GitHub Release
@@ -48,7 +51,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: RLAccountMigrator-exe
-          path: ./
+          path: ./ 
 
       - name: Rename file with version
         run: mv RLAccountMigrator.exe RLAccountMigrator-${{ github.ref_name }}.exe
