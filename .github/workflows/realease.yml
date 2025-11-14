@@ -35,7 +35,7 @@ jobs:
 
       - name: Install dependencies with Poetry
         run: |
-          poetry install --no-interaction --sync
+          poetry install --no-interaction --no-root
 
       - name: Build EXE with PyInstaller
         run: |
