@@ -79,12 +79,15 @@ jobs:
         id: meta
         run: |
           python - <<'PY'
-          import toml, subprocess
+          import toml, subprocess, os
+                  
           py = toml.load("pyproject.toml")
           version = py["tool"]["poetry"]["version"]
           sha = subprocess.check_output(["git","rev-parse","--short","HEAD"]).decode().strip()
-          print(f"::set-output name=beta_version::{version}-beta-{sha}")
-          print(f"::set-output name=short_sha::{sha}")
+                  
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"beta_version={version}-beta-{sha}\n")
+              f.write(f"short_sha={sha}\n")
           PY
 
       - name: Rename EXE to beta version
