@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "RLAccountMigrator"
-version = "1.1.0"
+version = "1.0.1"
 description = "Manage Rocket League saves and migrate settings between accounts."
 authors = ["Maizu Discord: maizu_u"]
 license = "MIT"
