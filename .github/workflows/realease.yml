@@ -37,10 +37,11 @@ jobs:
         run: |
           poetry install --no-interaction --no-root
 
-      - name: Read version from pyproject.toml
+      - name: Read version from pyproject.toml and generate version.txt
         id: meta
+        shell: pwsh
         run: |
-          python - <<'PY'
+          python - <<END
           import toml, os
 
           py = toml.load("pyproject.toml")
@@ -49,46 +50,46 @@ jobs:
 
           # Schreibe Outputs für GitHub Actions
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"version={version}\n")
-              f.write(f"major={major}\n")
-              f.write(f"minor={minor}\n")
-              f.write(f"patch={patch}\n")
+          f.write(f"version={version}\n")
+          f.write(f"major={major}\n")
+          f.write(f"minor={minor}\n")
+          f.write(f"patch={patch}\n")
 
           # version.txt für PyInstaller erstellen
-          version_txt = f'''
+          version_txt = f"""
           VSVersionInfo(
-          ffi=FixedFileInfo(
-            filevers=({major},{minor},{patch},0),
-            prodvers=({major},{minor},{patch},0),
-            mask=0x3f,
-            flags=0x0,
-            OS=0x4,
-            fileType=0x1,
-            subtype=0x0,
-            date=(0, 0)
-          ),
-          kids=[
-            StringFileInfo([
-              StringTable(
-                '040904B0',
-                [
-                  StringStruct('CompanyName', 'MyCompany'),
-                  StringStruct('FileDescription', 'RLAccountMigrator'),
-                  StringStruct('FileVersion', '{version}'),
-                  StringStruct('InternalName', 'RLAccountMigrator'),
-                  StringStruct('OriginalFilename', 'RLAccountMigrator.exe'),
-                  StringStruct('ProductName', 'RLAccountMigrator'),
-                  StringStruct('ProductVersion', '{version}')
-                ]
-              )
-            ]),
-            VarFileInfo([VarStruct('Translation', [1033, 1200])])
+            ffi=FixedFileInfo(
+              filevers=({major},{minor},{patch},0),
+              prodvers=({major},{minor},{patch},0),
+              mask=0x3f,
+              flags=0x0,
+              OS=0x4,
+              fileType=0x1,
+              subtype=0x0,
+              date=(0, 0)
+            ),
+            kids=[
+              StringFileInfo([
+                StringTable(
+                  '040904B0',
+                  [
+                    StringStruct('CompanyName', 'MyCompany'),
+                    StringStruct('FileDescription', 'RLAccountMigrator'),
+                    StringStruct('FileVersion', '{version}'),
+                    StringStruct('InternalName', 'RLAccountMigrator'),
+                    StringStruct('OriginalFilename', 'RLAccountMigrator.exe'),
+                    StringStruct('ProductName', 'RLAccountMigrator'),
+                    StringStruct('ProductVersion', '{version}')
+                  ]
+                )
+              ]),
+              VarFileInfo([VarStruct('Translation', [1033, 1200])])
             ]
-           )
-          '''
+          )
+          """
           with open("version.txt", "w", encoding="utf-8") as f:
               f.write(version_txt)
-          PY
+          END
 
       - name: Build EXE with PyInstaller
         run: |
