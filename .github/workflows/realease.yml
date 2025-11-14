@@ -10,15 +10,15 @@ on:
 env:
   PYTHON_VERSION: "3.12"
   EXE_BASENAME: RLAccountMigrator
-  PYINSTALLER_SPEC: src/main.py
   ICON_PATH: assets/icons/app.ico
 
 jobs:
-  build-exe:
-    name: Build EXE (Windows)
+  build-and-package:
+    name: Build & Package (Windows)
     runs-on: windows-latest
     outputs:
-      exe_file: ${{ steps.set-exe-path.outputs.exe_file }}
+      version: ${{ steps.meta.outputs.version }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,39 +27,31 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          cache: "poetry"
 
-      - name: Install build dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install poetry pyinstaller toml
+      - name: Install Poetry
+        run: pip install poetry
 
-      - name: Install dependencies with Poetry
-        run: |
-          poetry install --no-interaction --no-root
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
 
-      - name: Read version from pyproject.toml and generate version.txt
+      - name: Read version and generate metadata
         id: meta
         shell: pwsh
         run: |
-          python -c @"
-          import toml, os
+          $version = poetry version --short
+          $short_sha = git rev-parse --short HEAD
+          $major, $minor, $patch = $version -split '\.'
 
-          py = toml.load('pyproject.toml')
-          version = py['tool']['poetry']['version']
-          major, minor, patch = map(int, version.split('.'))
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "short_sha=$short_sha" >> $env:GITHUB_OUTPUT
 
-          # Schreibe Outputs für GitHub Actions
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f'version={version}\n')
-              f.write(f'major={major}\n')
-              f.write(f'minor={minor}\n')
-              f.write(f'patch={patch}\n')
-
-          # version.txt für PyInstaller erstellen
-          version_txt = f'''VSVersionInfo(
+          # Create version.txt for PyInstaller
+          @"
+          VSVersionInfo(
             ffi=FixedFileInfo(
-              filevers=({major},{minor},{patch},0),
-              prodvers=({major},{minor},{patch},0),
+              filevers=($major,$minor,$patch,0),
+              prodvers=($major,$minor,$patch,0),
               mask=0x3f,
               flags=0x0,
               OS=0x4,
@@ -74,95 +66,69 @@ jobs:
                   [
                     StringStruct('CompanyName', 'MyCompany'),
                     StringStruct('FileDescription', 'RLAccountMigrator'),
-                    StringStruct('FileVersion', '{version}'),
+                    StringStruct('FileVersion', '$version'),
                     StringStruct('InternalName', 'RLAccountMigrator'),
                     StringStruct('OriginalFilename', 'RLAccountMigrator.exe'),
                     StringStruct('ProductName', 'RLAccountMigrator'),
-                    StringStruct('ProductVersion', '{version}')
+                    StringStruct('ProductVersion', '$version')
                   ]
                 )
               ]),
               VarFileInfo([VarStruct('Translation', [1033, 1200])])
             ]
-          )'''
-
-          with open('version.txt', 'w', encoding='utf-8') as f:
-              f.write(version_txt)
-          "@
+          )
+          "@ | Out-File -FilePath version.txt -Encoding utf8
 
       - name: Build EXE with PyInstaller
-        run: pyinstaller --onefile --noconsole `
-          --name RLAccountMigrator `
-          --icon assets/icons/app.ico `
-          --hidden-import PySide6 `
-          --collect-data PySide6 `
-          --collect-binaries PySide6 `
-          --copy-metadata PySide6 `
-          --version-file version.txt `
-          src/main.py
-
-      - name: Copy EXE to root
-        shell: powershell
         run: |
-          Copy-Item -Path "dist\\${{ env.EXE_BASENAME }}.exe" -Destination "${{ env.EXE_BASENAME }}.exe" -Force
+          poetry run pyinstaller --onefile --noconsole `
+            --name ${{ env.EXE_BASENAME }} `
+            --icon ${{ env.ICON_PATH }} `
+            --hidden-import PySide6 `
+            --collect-data PySide6 `
+            --collect-binaries PySide6 `
+            --copy-metadata PySide6 `
+            --version-file version.txt `
+            src/main.py
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: exe-artifact
-          path: ${{ env.EXE_BASENAME }}.exe
-
-      - name: Set exe path output
-        id: set-exe-path
-        run: |
-          echo "exe_file=${{ env.EXE_BASENAME }}.exe" >> $GITHUB_OUTPUT
+          name: ${{ env.EXE_BASENAME }}-exe
+          path: dist/${{ env.EXE_BASENAME }}.exe
 
   beta-draft:
     name: "Beta: Draft Release from main"
-    needs: build-exe
+    needs: build-and-package
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.build-and-package.outputs.version }}
+      SHORT_SHA: ${{ needs.build-and-package.outputs.short_sha }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Download EXE artifact
         uses: actions/download-artifact@v4
         with:
-          name: exe-artifact
+          name: ${{ env.EXE_BASENAME }}-exe
           path: ./work
 
-      - name: Install Python dependencies
-        run: pip install toml
-
-      - name: Read version and short SHA
-        id: meta
+      - name: Rename EXE for beta release
         run: |
-          python - <<'PY'
-          import toml, subprocess, os
-
-          py = toml.load("pyproject.toml")
-          version = py["tool"]["poetry"]["version"]
-          sha = subprocess.check_output(["git","rev-parse","--short","HEAD"]).decode().strip()
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"beta_version={version}-beta-{sha}\n")
-              f.write(f"short_sha={sha}\n")
-          PY
-
-      - name: Rename EXE for release
-        run: |
-          cp work/${{ env.EXE_BASENAME }}.exe work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.beta_version }}.exe
+          BETA_VERSION="${VERSION}-beta-${SHORT_SHA}"
+          mv work/${{ env.EXE_BASENAME }}.exe work/${{ env.EXE_BASENAME }}-${BETA_VERSION}.exe
+          echo "BETA_VERSION=${BETA_VERSION}" >> $GITHUB_ENV
 
       - name: Create or update Draft Release (beta)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: beta-${{ steps.meta.outputs.short_sha }}
-          name: Beta ${{ steps.meta.outputs.beta_version }}
+          tag_name: beta-${{ env.SHORT_SHA }}
+          name: Beta ${{ env.BETA_VERSION }}
           draft: true
-          files: work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.beta_version }}.exe
+          files: work/${{ env.EXE_BASENAME }}-${{ env.BETA_VERSION }}.exe
           body: |
-            🧪 **Beta Build** from commit ${{ steps.meta.outputs.short_sha }}
+            🧪 **Beta Build** from commit ${{ env.SHORT_SHA }}
+
+            Version: `${{ env.VERSION }}`
 
             This is an automated pre-release build for testing purposes.
         env:
@@ -170,9 +136,12 @@ jobs:
 
   release:
     name: Official Release for Tag
-    needs: build-exe
+    needs: build-and-package
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.build-and-package.outputs.version }}
     steps:
       - name: Checkout full history
         uses: actions/checkout@v4
@@ -182,35 +151,15 @@ jobs:
       - name: Download EXE artifact
         uses: actions/download-artifact@v4
         with:
-          name: exe-artifact
+          name: ${{ env.EXE_BASENAME }}-exe
           path: ./work
 
-      - name: Install Python dependencies
-        run: pip install toml
-
-      - name: Determine tag & version
-        id: meta
+      - name: Rename and checksum EXE
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          PY_VERSION=$(python - <<'PY'
-          import toml
-          py = toml.load("pyproject.toml")
-          print(py["tool"]["poetry"]["version"])
-          PY
-          )
-          if [ -z "$PY_VERSION" ]; then PY_VERSION="$TAG"; fi
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "version=$PY_VERSION" >> $GITHUB_OUTPUT
+          mv work/${{ env.EXE_BASENAME }}.exe work/${{ env.EXE_BASENAME }}-${{ env.VERSION }}.exe
+          sha256sum work/${{ env.EXE_BASENAME }}-${{ env.VERSION }}.exe > work/${{ env.EXE_BASENAME }}-${{ env.VERSION }}.sha256
 
-      - name: Rename EXE with version
-        run: |
-          mv work/${{ env.EXE_BASENAME }}.exe work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.exe
-
-      - name: Compute checksum (sha256)
-        run: |
-          sha256sum work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.exe > work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.sha256
-
-      - name: Install Rust toolchain (for changelog generation)
+      - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
@@ -218,26 +167,29 @@ jobs:
       - name: Install git-cliff
         run: cargo install --locked git-cliff
 
-      - name: Generate CHANGELOG.md
+      - name: Generate CHANGELOG
         run: |
-          git-cliff --tag ${{ steps.meta.outputs.tag }} -o work/CHANGELOG.md || git-cliff -l -o work/CHANGELOG.md
+          git-cliff --tag ${{ env.TAG }} -o work/CHANGELOG.md || git-cliff -l -o work/CHANGELOG.md
 
       - name: Read changelog for release body
         id: changelog
         run: |
-          echo "body<<EOF" >> $GITHUB_OUTPUT
-          sed -n '1,2000p' work/CHANGELOG.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          {
+            echo "body<<EOF"
+            head -c 8000 work/CHANGELOG.md
+            echo ""
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
       - name: Publish official release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.tag }}
+          tag_name: ${{ env.TAG }}
+          name: ${{ env.TAG }}
           body: ${{ steps.changelog.outputs.body }}
           files: |
-            work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.exe
-            work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.sha256
+            work/${{ env.EXE_BASENAME }}-${{ env.VERSION }}.exe
+            work/${{ env.EXE_BASENAME }}-${{ env.VERSION }}.sha256
             work/CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
