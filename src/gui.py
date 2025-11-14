@@ -1,8 +1,9 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QTabWidget, QLabel, QFileDialog, QMessageBox, QApplication,
-    QScrollArea, QFrame
+    QScrollArea, QFrame, QSystemTrayIcon 
 )
 import os
 from util import RLManager
@@ -80,6 +81,8 @@ class RLMainWindow(QMainWindow):
         self.setMinimumSize(720, 520)
         self.rl_manager = rl_manager
 
+        self.setIcons()
+
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
@@ -94,6 +97,10 @@ class RLMainWindow(QMainWindow):
         self.tabs.addTab(self.migrate_tab, "Migrate Settings")
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
+
+    def setIcons(self):
+        app_icon = QIcon("assets/icons/app.ico")
+        self.setWindowIcon(app_icon)
 
     def on_tab_changed(self, index: int):
         widget = self.tabs.widget(index)

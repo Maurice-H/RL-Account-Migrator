@@ -1,0 +1,168 @@
+name: Build EXE, Beta Drafts & Releases
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+
+env:
+  PYTHON_VERSION: "3.12"
+  EXE_BASENAME: RLAccountMigrator
+  PYINSTALLER_SPEC: src/main.py
+  ICON_PATH: assets/icons/app.ico
+
+jobs:
+  build-exe:
+    name: Build EXE (Windows)
+    runs-on: windows-latest
+    outputs:
+      exe_file: ${{ steps.set-exe-path.outputs.exe_file }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry pyinstaller toml
+
+      - name: Install dependencies with Poetry
+        run: |
+          poetry install --no-interaction --sync
+
+      - name: Build EXE with PyInstaller
+        run: |
+          pyinstaller --onefile --noconsole --name ${{ env.EXE_BASENAME }} --icon ${{ env.ICON_PATH }} ${{ env.PYINSTALLER_SPEC }}
+
+      - name: Copy EXE to root
+        shell: powershell
+        run: |
+          Copy-Item -Path "dist\\${{ env.EXE_BASENAME }}.exe" -Destination "${{ env.EXE_BASENAME }}.exe" -Force
+
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: exe-artifact
+          path: ${{ env.EXE_BASENAME }}.exe
+
+      - name: Set exe path output
+        id: set-exe-path
+        run: |
+          echo "exe_file=${{ env.EXE_BASENAME }}.exe" >> $GITHUB_OUTPUT
+
+  beta-draft:
+    name: "Beta: Draft Release from main"
+    needs: build-exe
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download EXE artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: exe-artifact
+          path: ./work
+
+      - name: Read version and short SHA
+        id: meta
+        run: |
+          python - <<'PY'
+          import toml, subprocess
+          py = toml.load("pyproject.toml")
+          version = py["tool"]["poetry"]["version"]
+          sha = subprocess.check_output(["git","rev-parse","--short","HEAD"]).decode().strip()
+          print(f"::set-output name=beta_version::{version}-beta-{sha}")
+          print(f"::set-output name=short_sha::{sha}")
+          PY
+
+      - name: Rename EXE to beta version
+        run: |
+          mv work/${{ env.EXE_BASENAME }}.exe work/${{ steps.meta.outputs.beta_version }}.exe
+
+      - name: Create or update Draft Release (beta)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: beta-${{ steps.meta.outputs.short_sha }}
+          name: Beta ${{ steps.meta.outputs.beta_version }}
+          draft: true
+          files: work/${{ steps.meta.outputs.beta_version }}.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release:
+    name: Official Release for Tag
+    needs: build-exe
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download EXE artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: exe-artifact
+          path: ./work
+
+      - name: Determine tag & version
+        id: meta
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          PY_VERSION=$(python - <<'PY'
+          import toml
+          py = toml.load("pyproject.toml")
+          print(py["tool"]["poetry"]["version"])
+          PY
+          )
+          if [ -z "$PY_VERSION" ]; then PY_VERSION="$TAG"; fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$PY_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Rename EXE with version
+        run: |
+          mv work/${{ env.EXE_BASENAME }}.exe work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.exe
+
+      - name: Compute checksum (sha256)
+        run: |
+          sha256sum work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.exe > work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.sha256
+
+      - name: Install Rust toolchain (for changelog generation)
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+        # As documented :contentReference[oaicite:0]{index=0}
+
+      - name: Install git-cliff
+        run: cargo install --locked git-cliff
+
+      - name: Generate CHANGELOG.md
+        run: |
+          git-cliff --tag ${{ steps.meta.outputs.tag }} -o work/CHANGELOG.md || git-cliff -l -o work/CHANGELOG.md
+
+      - name: Read changelog for release body
+        id: changelog
+        run: |
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          sed -n '1,2000p' work/CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Publish official release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          body: ${{ steps.changelog.outputs.body }}
+          files: |
+            work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.exe
+            work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.sha256
+            work/CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
