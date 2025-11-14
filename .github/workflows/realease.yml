@@ -80,15 +80,7 @@ jobs:
 
       - name: Build EXE with PyInstaller
         run: |
-          poetry run pyinstaller --onefile --noconsole `
-            --name ${{ env.EXE_BASENAME }} `
-            --icon ${{ env.ICON_PATH }} `
-            --hidden-import PySide6 `
-            --collect-data PySide6 `
-            --collect-binaries PySide6 `
-            --copy-metadata PySide6 `
-            --version-file version.txt `
-            src/main.py
+          poetry run pyinstaller RLAccountMigrator.spec
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
