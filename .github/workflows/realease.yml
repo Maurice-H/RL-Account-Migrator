@@ -50,10 +50,10 @@ jobs:
 
           # Schreibe Outputs für GitHub Actions
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-          f.write(f'version={version}\n')
-          f.write(f'major={major}\n')
-          f.write(f'minor={minor}\n')
-          f.write(f'patch={patch}\n')
+              f.write(f'version={version}\n')
+              f.write(f'major={major}\n')
+              f.write(f'minor={minor}\n')
+              f.write(f'patch={patch}\n')
 
           # version.txt für PyInstaller erstellen
           version_txt = f'''
