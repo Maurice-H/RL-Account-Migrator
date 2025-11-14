@@ -98,8 +98,9 @@ jobs:
           name: Beta ${{ steps.meta.outputs.beta_version }}
           draft: true
           files: work/${{ steps.meta.outputs.beta_version }}.exe
+          overwrite_files: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }} # PAT statt default token
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }} # <- PAT verwenden, nicht das default token
 
   release:
     name: Official Release for Tag
