@@ -94,7 +94,10 @@ jobs:
         run: pyinstaller --onefile --noconsole `
           --name RLAccountMigrator `
           --icon assets/icons/app.ico `
-          --collect-all PySide6 `
+          --hidden-import PySide6 `
+          --collect-data PySide6 `
+          --collect-binaries PySide6 `
+          --copy-metadata PySide6 `
           --version-file version.txt `
           src/main.py
 
@@ -163,7 +166,7 @@ jobs:
 
             This is an automated pre-release build for testing purposes.
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
   release:
     name: Official Release for Tag
@@ -237,4 +240,4 @@ jobs:
             work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.version }}.sha256
             work/CHANGELOG.md
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
