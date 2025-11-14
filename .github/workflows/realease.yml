@@ -92,7 +92,13 @@ jobs:
               "
 
       - name: Build EXE with PyInstaller
-        run: pyinstaller --onefile --noconsole --name RLAccountMigrator --icon assets/icons/app.ico --collect-all PySide6 --version-file version.txt src/main.py
+        run: pyinstaller --onefile --noconsole `
+          --name RLAccountMigrator `
+          --icon assets/icons/app.ico `
+          --paths "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\PySide6" `
+          --add-data "C:\hostedtoolcache\windows\Python\3.12.10\x64\Lib\site-packages\PySide6\Qt\*;PySide6\Qt" `
+          --version-file version.txt `
+          src/main.py
 
       - name: Copy EXE to root
         shell: powershell
@@ -143,9 +149,9 @@ jobs:
               f.write(f"short_sha={sha}\n")
           PY
 
-      - name: Rename EXE to beta version
+      - name: Rename EXE for release
         run: |
-          mv work/${{ env.EXE_BASENAME }}.exe work/${{ steps.meta.outputs.beta_version }}.exe
+          cp work/${{ env.EXE_BASENAME }}.exe work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.beta_version }}.exe
 
       - name: Create or update Draft Release (beta)
         uses: softprops/action-gh-release@v2
