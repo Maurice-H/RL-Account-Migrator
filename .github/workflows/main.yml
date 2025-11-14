@@ -5,7 +5,8 @@ on:
     branches:
       - main
     tags:
-      - "v*.*.*"
+      - "v*.*.*"        # Offizielle Releases
+      - "beta*.*.*"     # Beta/Draft Releases
 
 jobs:
   build:
@@ -29,7 +30,7 @@ jobs:
         run: |
           pyinstaller --onefile --noconsole --name RLAccountMigrator src/main.py
 
-      - name: Copy EXE to root for release
+      - name: Copy EXE to root
         run: copy dist\RLAccountMigrator.exe RLAccountMigrator.exe
 
       - name: Upload EXE as artifact
@@ -51,12 +52,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: RLAccountMigrator-exe
-          path: ./ 
+          path: ./
 
-      - name: Rename file with version
+      - name: Rename EXE with version
         run: mv RLAccountMigrator.exe RLAccountMigrator-${{ github.ref_name }}.exe
 
-      - name: Publish Release
+      - name: Publish Draft or Official Release
         uses: softprops/action-gh-release@v2
         with:
           files: RLAccountMigrator-${{ github.ref_name }}.exe
+          draft: ${{ startsWith(github.ref_name, 'beta') }}   # Draft wenn Tag mit 'beta' beginnt
