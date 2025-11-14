@@ -41,7 +41,7 @@ jobs:
         id: meta
         shell: pwsh
         run: |
-          python -c "
+          python -c @"
           import toml, os
 
           py = toml.load('pyproject.toml')
@@ -56,8 +56,7 @@ jobs:
               f.write(f'patch={patch}\n')
 
           # version.txt für PyInstaller erstellen
-          version_txt = f'''
-          VSVersionInfo(
+          version_txt = f'''VSVersionInfo(
             ffi=FixedFileInfo(
               filevers=({major},{minor},{patch},0),
               prodvers=({major},{minor},{patch},0),
@@ -85,11 +84,11 @@ jobs:
               ]),
               VarFileInfo([VarStruct('Translation', [1033, 1200])])
             ]
-          )
-          '''
+          )'''
+
           with open('version.txt', 'w', encoding='utf-8') as f:
               f.write(version_txt)
-              "
+          "@
 
       - name: Build EXE with PyInstaller
         run: pyinstaller --onefile --noconsole `
@@ -158,10 +157,13 @@ jobs:
           tag_name: beta-${{ steps.meta.outputs.short_sha }}
           name: Beta ${{ steps.meta.outputs.beta_version }}
           draft: true
-          files: work/${{ steps.meta.outputs.beta_version }}.exe
-          overwrite_files: true
+          files: work/${{ env.EXE_BASENAME }}-${{ steps.meta.outputs.beta_version }}.exe
+          body: |
+            🧪 **Beta Build** from commit ${{ steps.meta.outputs.short_sha }}
+
+            This is an automated pre-release build for testing purposes.
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }} # <- PAT verwenden, nicht das default token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release:
     name: Official Release for Tag
@@ -179,6 +181,9 @@ jobs:
         with:
           name: exe-artifact
           path: ./work
+
+      - name: Install Python dependencies
+        run: pip install toml
 
       - name: Determine tag & version
         id: meta
@@ -206,7 +211,6 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-        # As documented :contentReference[oaicite:0]{index=0}
 
       - name: Install git-cliff
         run: cargo install --locked git-cliff
