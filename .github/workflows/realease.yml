@@ -92,13 +92,7 @@ jobs:
               "
 
       - name: Build EXE with PyInstaller
-        run: |
-          pyinstaller --onefile --noconsole \
-            --name ${{ env.EXE_BASENAME }} \
-            --icon ${{ env.ICON_PATH }} \
-            --collect-all PySide6 \
-            --version-file version.txt \
-            ${{ env.PYINSTALLER_SPEC }}
+        run: pyinstaller --onefile --noconsole --name RLAccountMigrator --icon assets/icons/app.ico --collect-all PySide6 --version-file version.txt src/main.py
 
       - name: Copy EXE to root
         shell: powershell
