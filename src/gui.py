@@ -99,7 +99,7 @@ class RLMainWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
     def setIcons(self):
-        app_icon = QIcon("assets/icons/app.ico")
+        app_icon = QIcon(".././assets/icons/app.ico")
         self.setWindowIcon(app_icon)
 
     def on_tab_changed(self, index: int):

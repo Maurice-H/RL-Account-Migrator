@@ -1,13 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import os
-import sys
-
 block_cipher = None
-
-# Absoluter Pfad zur .spec-Datei
-base_path = os.path.abspath(os.path.dirname(sys.argv[0]))
-
 
 a = Analysis(
     ['src/main.py'],
@@ -76,8 +69,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-
-    # Wichtig: absolute Pfade relativ zur .spec-Datei
-    version_file=os.path.join(base_path, "version.txt"),
-    icon=os.path.join(base_path, "assets", "icons", "app.ico"),
+    icon='./assets/icons/app.ico',
+    version_file='version.txt',
 )
+
