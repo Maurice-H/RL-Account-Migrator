@@ -1,9 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
+import sys
 
 block_cipher = None
-base_path = os.path.dirname(__file__)
+
+# Absoluter Pfad zur .spec-Datei
+base_path = os.path.abspath(os.path.dirname(sys.argv[0]))
 
 
 a = Analysis(
