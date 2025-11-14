@@ -99,7 +99,7 @@ jobs:
           draft: true
           files: work/${{ steps.meta.outputs.beta_version }}.exe
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }} # PAT statt default token
 
   release:
     name: Official Release for Tag
