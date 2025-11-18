@@ -1,11 +1,11 @@
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QMainWindow, QWidget, QVBoxLayout, QGridLayout,
     QPushButton, QTabWidget, QLabel, QFileDialog, QMessageBox, QApplication,
-    QScrollArea, QFrame, QSystemTrayIcon 
+    QScrollArea, QFrame 
 )
-import os
+from pathlib import Path
 from util import RLManager
 
 # --- Helper Functions ---
@@ -78,7 +78,7 @@ class RLMainWindow(QMainWindow):
     def __init__(self, rl_manager: RLManager):
         super().__init__()
         self.setWindowTitle("RL Account Migrator")
-        self.setMinimumSize(720, 520)
+        self.setMinimumSize(820, 600)
         self.rl_manager = rl_manager
 
         self.setIcons()
@@ -86,19 +86,20 @@ class RLMainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
 
-        self.home_tab = HomeTab(self.navigate_to_tab)
-        self.setup_tab = SetupTab(self.rl_manager)
+        self.home_tab = HomeTab(self.navigate_to_tab, self.rl_manager)
+        self.setup_tab = DebugTab(self.rl_manager)
         self.migrate_tab = MigrateSettingsTab(self.rl_manager)
 
         self.tabs.addTab(self.home_tab, "Home")
-        self.tabs.addTab(self.setup_tab, "Set Up")
         self.tabs.addTab(self.migrate_tab, "Migrate Settings")
+        self.tabs.addTab(self.setup_tab, "Manual Setup")
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
     def setIcons(self):
-        app_icon = QIcon(".././assets/icons/app.ico")
-        self.setWindowIcon(app_icon)
+        base = Path(__file__).resolve().parent
+        icon_path = base.parent / "assets" / "icons" / "app.ico"
+        self.setWindowIcon(QIcon(str(icon_path)))
 
     def on_tab_changed(self, index: int):
         widget = self.tabs.widget(index)
@@ -110,7 +111,7 @@ class RLMainWindow(QMainWindow):
 
 # --- Home Tab ---
 class HomeTab(QWidget):
-    def __init__(self, navigate_callback):
+    def __init__(self, navigate_callback, rl_manager: RLManager):
         super().__init__()
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 18, 18, 18)
@@ -126,243 +127,84 @@ class HomeTab(QWidget):
         subtitle.setWordWrap(True)
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        btn_setup = QPushButton("Set Up")
-        btn_setup.setToolTip("Choose save/backup folders and Rocket League exe")
+        setup_step_label = QLabel("Step 1\nGet Config paths")
+        setup_step_label.setStyleSheet("font-size: 16px; font-weight: 600; color: #e0e0f0;")
+        setup_step_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        btn_setup = QPushButton("Get Config")
+        btn_setup.setToolTip("Sets up needed paths for steam and epic")
         btn_setup.setFixedWidth(180)
+        
+        stats_dic = rl_manager.check_all_paths_set()
+        self.setup_step_label = QLabel(stats_dic["text"], alignment=Qt.AlignmentFlag.AlignCenter)
+        self.setup_step_label.setStyleSheet(f"color: {stats_dic["color"]};")
+
+        get_save_grid = QGridLayout()
+        get_save_grid.setHorizontalSpacing(12)
+        get_save_grid.setVerticalSpacing(10)
+
+        get_save_step_label = QLabel("Step 2\nLog in to Steam or Epic with your account and start the backup process.")
+        get_save_step_label.setStyleSheet("font-size: 16px; font-weight: 600; color: #e0e0f0;")
+        get_save_step_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        get_save_epic_label = QLabel("Epic", alignment=Qt.AlignmentFlag.AlignCenter)
+        get_save_epic = QPushButton("Save Epic Settings")
+        get_save_epic.setToolTip("Starts Rocket League to generate new save files for epic")
+        get_save_epic.setFixedWidth(160)
+
+        get_save_steam_label = QLabel("Steam", alignment=Qt.AlignmentFlag.AlignCenter)
+        get_save_steam = QPushButton("Save Steam Settings")
+        get_save_steam.setToolTip("Starts Rocket League to generate new save files for steam")
+        get_save_steam.setFixedWidth(160)
+
+        get_save_grid.addWidget(get_save_epic_label, 0, 0)
+        get_save_grid.addWidget(get_save_epic, 1, 0)
+        get_save_grid.addWidget(get_save_steam_label, 0, 1)
+        get_save_grid.addWidget(get_save_steam, 1, 1)
+
+        migrate_step_label = QLabel("Step 3\nNow you are ready to copy your settings to steam or epic.")
+        migrate_step_label.setStyleSheet("font-size: 16px; font-weight: 600; color: #e0e0f0;")
+        migrate_step_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        btn_migrate = QPushButton("Migrate Settings")
+        btn_migrate.setFixedWidth(160)
+
+        migrate_box = QVBoxLayout()
+        migrate_box.addWidget(migrate_step_label)
+        migrate_box.addWidget(btn_migrate, alignment=Qt.AlignmentFlag.AlignCenter)
+        migrate_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         layout.addWidget(welcome)
         layout.addWidget(subtitle)
+        layout.addWidget(setup_step_label, alignment=Qt.AlignmentFlag.AlignCenter)        
         layout.addWidget(btn_setup, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.setup_step_label)
+        layout.addWidget(get_save_step_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addLayout(get_save_grid)
+        layout.addLayout(migrate_box)
 
-        layoutH = QHBoxLayout()
-        layoutH.setSpacing(16)
-        layoutH.addStretch()
-        btn_migrate = QPushButton("Migrate Settings")
-        btn_migrate.setFixedWidth(160)
-        layoutH.addWidget(btn_migrate)
-        layoutH.addStretch()
-        layout.addLayout(layoutH)
+        btn_setup.clicked.connect(lambda: self.run_auto_config(rl_manager))
+        btn_migrate.clicked.connect(lambda: navigate_callback(1))
+        get_save_epic.clicked.connect(lambda: rl_manager.generate_new_save_files("get_backup", "epic"))
+        get_save_steam.clicked.connect(lambda: rl_manager.generate_new_save_files("get_backup", "steam"))
 
-        btn_setup.clicked.connect(lambda: navigate_callback(1))
-        btn_migrate.clicked.connect(lambda: navigate_callback(2))
-
-# --- Setup Tab ---
-class SetupTab(RequiresSetupTab):
-    def __init__(self, rl_manager: RLManager):
-        super().__init__(rl_manager)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        container = QWidget()
-        scroll.setWidget(container)
-
-        main = QVBoxLayout(container)
-        main.setContentsMargins(20, 20, 20, 20)
-        main.setSpacing(16)
-        main.setAlignment(Qt.AlignmentFlag.AlignTop)
-
-        instr_card = card_frame_widget(
-        "Quick Setup",
-        "Select the save folder of Rocket League, choose a backup folder to store your saved files, "
-        "and point to the Rocket League executable. After setup you can run Skip Intro or Migrate Settings.",
-        notice_text="Before creating any backups, start Rocket League once with the account you want to preserve.\n"
-                    "This ensures the tool can detect and use the correct save files."
-        )   
-        main.addWidget(instr_card)
-
-        self.save_label = QLabel(f"Save folder: {elide_path(rl_manager.save_path)}")
-        self.save_label.setToolTip(rl_manager.save_path or "")
-        self.save_label.setWordWrap(True)
-        self.save_info = QLabel("Default path: C:/Users/<you>/Documents/My Games/Rocket League/TAGame/SaveDataEpic/DBE_Production")
-        self.save_info.setStyleSheet("color: #bfbfcf; font-size: 12px;")
-
-        self.backup_label = QLabel(f"Backup folder: {elide_path(rl_manager.backup_path)}")
-        self.backup_label.setToolTip(rl_manager.backup_path or "")
-        self.backup_label.setWordWrap(True)
-        self.backup_info = QLabel("Folder where your save‑backups will be stored.")
-        self.backup_info.setStyleSheet("color: #bfbfcf; font-size: 12px;")
-
-        self.exe_label = QLabel(f"Rocket League exe: {elide_path(rl_manager.rocket_league_path)}")
-        self.exe_label.setToolTip(rl_manager.rocket_league_path or "")
-        self.exe_label.setWordWrap(True)
-        self.exe_info = QLabel("Typical install path: C:/Program Files/Epic Games/rocketleague/Binaries/Win64")
-        self.exe_info.setStyleSheet("color: #bfbfcf; font-size: 12px;")
-
-        main.addWidget(self.save_label)
-        main.addWidget(self.save_info)
-        main.addWidget(self.backup_label)
-        main.addWidget(self.backup_info)
-        main.addWidget(self.exe_label)
-        main.addWidget(self.exe_info)
-
-        btn_grid = QGridLayout()
-        btn_grid.setHorizontalSpacing(12)
-        btn_grid.setVerticalSpacing(10)
-        btn_width = 220
-
-        self.btn_choose_save = QPushButton("Choose save folder")
-        self.btn_unset_save = QPushButton("Unset save folder")
-        self.btn_choose_backup = QPushButton("Choose backup folder")
-        self.btn_unset_backup = QPushButton("Unset backup folder")
-        self.btn_choose_exe = QPushButton("Choose Rocket League exe")
-        self.btn_unset_exe = QPushButton("Unset Rocket League exe")
-
-        for btn in [self.btn_choose_save, self.btn_unset_save,
-                    self.btn_choose_backup, self.btn_unset_backup,
-                    self.btn_choose_exe, self.btn_unset_exe]:
-            btn.setFixedWidth(btn_width)
-
-        btn_grid.addWidget(self.btn_choose_save, 0, 0)
-        btn_grid.addWidget(self.btn_unset_save, 0, 1)
-        btn_grid.addWidget(self.btn_choose_backup, 1, 0)
-        btn_grid.addWidget(self.btn_unset_backup, 1, 1)
-        btn_grid.addWidget(self.btn_choose_exe, 2, 0)
-        btn_grid.addWidget(self.btn_unset_exe, 2, 1)
-
-        main.addLayout(btn_grid)
-
-        self.btn_store = QPushButton("Store latest .save as backup")
-        self.btn_store.setFixedWidth(260)
-        main.addWidget(self.btn_store, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        self.status_label = QLabel("Status: ‑")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._style_status("incomplete")
-        main.addWidget(self.status_label)
-
-        outer = QVBoxLayout(self)
-        outer.addWidget(scroll)
-
-        self.btn_choose_save.clicked.connect(lambda: self.choose_folder("save"))
-        self.btn_unset_save.clicked.connect(lambda: self.unset_folder("save"))
-        self.btn_choose_backup.clicked.connect(lambda: self.choose_folder("backup"))
-        self.btn_unset_backup.clicked.connect(lambda: self.unset_folder("backup"))
-        self.btn_choose_exe.clicked.connect(lambda: self.choose_folder("rocket_league"))
-        self.btn_unset_exe.clicked.connect(lambda: self.unset_folder("rocket_league"))
-        self.btn_store.clicked.connect(lambda: self.store_latest_saves())
-
-        self.update_all_labels_and_status()
-
-    def _style_status(self, state: str):
-        color_map = {
-            "ready": ("#dff7e0", "#2ca84a"),
-            "warning": ("#fff6e0", "#b77b00"),
-            "error": ("#ffe6e6", "#d02a2a"),
-            "incomplete": ("#ededf5", "#7a7aa8")
-        }
-        bg, fg = color_map.get(state, color_map["incomplete"])
-        self.status_label.setStyleSheet(
-            f"background: {bg}; color: {fg}; border-radius: 8px; padding: 8px; font-weight: 600;"
-        )
-
-    def update_all_labels_and_status(self):
-        self.save_label.setText(f"Save folder: {elide_path(self.rl_manager.save_path)}")
-        self.save_label.setToolTip(self.rl_manager.save_path or "")
-        self.backup_label.setText(f"Backup folder: {elide_path(self.rl_manager.backup_path)}")
-        self.backup_label.setToolTip(self.rl_manager.backup_path or "")
-        self.exe_label.setText(f"Rocket League exe: {elide_path(self.rl_manager.rocket_league_path)}")
-        self.exe_label.setToolTip(self.rl_manager.rocket_league_path or "")
-
-        save_set = bool(self.rl_manager.save_path)
-        backup_set = bool(self.rl_manager.backup_path)
-        exe_set = bool(self.rl_manager.rocket_league_path)
-
-        self.btn_store.setEnabled(save_set and backup_set)
-
-        if not (save_set or backup_set or exe_set):
-            self.status_label.setText("Status: Please configure save, backup & exe paths.")
-            self._style_status("incomplete")
-        elif not save_set and backup_set:
-            self.status_label.setText("Status: Save folder missing.")
-            self._style_status("warning")
-        elif save_set and not backup_set:
-            self.status_label.setText("Status: Backup folder missing.")
-            self._style_status("warning")
-        else:
-            err = self.rl_manager.check_folders_identical()
-            if err and self.rl_manager.save_path != "" and self.rl_manager.backup_path != "":
-                self.status_label.setText(f"Status: {err}")
-                self._style_status("error")
+    def run_auto_config(self, rl_manager: RLManager):
+        
+        self.log_status(text="Starting auto config", color="#f0c36b")
+        try:
+            ok = rl_manager.get_rocket_league_locations()
+            if bool(ok):
+                self.log_status(text="Settings configured successfully!", color="#86d07f")
+                QMessageBox.information(self, "Done", "Settings configured successfully.")
             else:
-                err2 = self.rl_manager.check_path_contains_save_files()
-                if err2:
-                    self.status_label.setText(f"Status: {err2}")
-                    self._style_status("warning")
-                else:
-                    if not exe_set:
-                        self.status_label.setText("Status: Ready (exe missing)")
-                        self._style_status("warning")
-                    else:
-                        self.status_label.setText("Status: Ready")
-                        self._style_status("ready")
+                self.log_status(text="Couldn't configured settings.\nVisit Manual Setup", color="#d97777")
+                QMessageBox.information(self, "Info", "Couldn't configured settings.\nVisit Manual Setup")
+        except Exception as e:
+            self.log_status(text="Error occurred.", color="#d97777")
+            show_error(self, str(e))
 
-        win = self.window()
-        if hasattr(win, "tabs"):
-            for i in range(win.tabs.count()):
-                w = win.tabs.widget(i)
-                if hasattr(w, "check_for_set_up"):
-                    try:
-                        w.check_for_set_up()
-                    except Exception:
-                        pass
+    def log_status(self, text: str = "", color: str = "#d0d0d8"):
+        self.setup_step_label.setText(text)
+        self.setup_step_label.setStyleSheet(f"color: {color};")
 
-    def choose_folder(self, folder_type: str):
-        settings = self.rl_manager.settings
-        if folder_type == "rocket_league":
-            path, _ = QFileDialog.getOpenFileName(self, "Select Rocket League exe", "", "Executables (*.exe)")
-            if path:
-                self.rl_manager.rocket_league_path = path
-                settings.setValue("rocket_league_path", path)
-        else:
-            folder = QFileDialog.getExistingDirectory(self, f"Choose {folder_type} folder")
-            if folder:
-                if folder_type == "save":
-                    self.rl_manager.save_path = folder
-                    err = self.rl_manager.check_folders_identical()
-                    err2 = self.rl_manager.check_path_contains_save_files()
-                    if err:
-                        self.rl_manager.save_path = ""
-                        show_error(self, err)
-                    elif err2:
-                        self.rl_manager.save_path = ""
-                        show_error(self, err2)
-                    settings.setValue("save_path", self.rl_manager.save_path)
-                elif folder_type == "backup":
-                    self.rl_manager.backup_path = folder
-                    err = self.rl_manager.check_folders_identical()
-                    if err:
-                        self.rl_manager.backup_path = ""
-                        show_error(self, err)
-                    self.rl_manager.settings.setValue("backup_path", self.rl_manager.backup_path)
-        self.update_all_labels_and_status()
-
-    def unset_folder(self, folder_type: str):
-        settings = self.rl_manager.settings
-        if folder_type == "rocket_league":
-            self.rl_manager.rocket_league_path = ""
-            settings.setValue("rocket_league_path", "")
-        elif folder_type == "save":
-            self.rl_manager.save_path = ""
-            settings.setValue("save_path", "")
-        elif folder_type == "backup":
-            self.rl_manager.backup_path = ""
-            settings.setValue("backup_path", "")
-        self.update_all_labels_and_status()
-
-    def store_latest_saves(self):
-        err = self.rl_manager.check_folder_paths_set()
-        if err:
-            show_error(self, err)
-            return
-        copied = self.rl_manager.duplicate_save()
-        if isinstance(copied, list):
-            names = [os.path.basename(p) for p in copied]
-            QMessageBox.information(self, "Info", "Saved backups:\n" + "\n".join(names))
-        elif isinstance(copied, str):
-            show_error(self, copied)
-            return
-        else:
-            QMessageBox.information(self, "Info", "No saves found to back up.")
 
 # --- Migrate Settings Tab ---
 class MigrateSettingsTab(RequiresSetupTab):
@@ -383,51 +225,287 @@ class MigrateSettingsTab(RequiresSetupTab):
             "Copy settings from your primary account saves to the new account."
         )
         main.addWidget(instr_card)
+        
+        migrate_grid = QGridLayout()
+        migrate_grid.setHorizontalSpacing(12)
+        migrate_grid.setVerticalSpacing(10)
 
-        self.btn_migrate = QPushButton("Migrate Settings")
-        self.btn_migrate.setFixedWidth(220)
-        main.addWidget(self.btn_migrate, alignment=Qt.AlignmentFlag.AlignCenter)
+        migrate_header_epic = QLabel("Epic", alignment=Qt.AlignmentFlag.AlignCenter)
+        self.btn_migrate_epic = QPushButton("Migrate to current epic account")
 
-        self.status_label = QLabel("Status: -")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: #d0d0d8;")
-        main.addWidget(self.status_label)
+        self.status_label_epic = QLabel("Epic status: -", alignment=Qt.AlignmentFlag.AlignCenter)
+        self.status_label_epic.setStyleSheet("color: #d0d0d8;")
+
+        migrate_grid.addWidget(migrate_header_epic, 0, 0)
+        migrate_grid.addWidget(self.btn_migrate_epic, 1, 0)
+        migrate_grid.addWidget(self.status_label_epic, 2, 0)
+
+        migrate_header_steam = QLabel("Steam", alignment=Qt.AlignmentFlag.AlignCenter)
+        self.btn_migrate_steam = QPushButton("Migrate to current steam account")
+
+        self.status_label_steam = QLabel("Steam status: -", alignment=Qt.AlignmentFlag.AlignCenter)
+        self.status_label_steam.setStyleSheet("color: #d0d0d8;")
+
+        migrate_grid.addWidget(migrate_header_steam, 0, 1)
+        migrate_grid.addWidget(self.btn_migrate_steam, 1, 1)
+        migrate_grid.addWidget(self.status_label_steam, 2, 1)
+
+        migrate_grid.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        main.addLayout(migrate_grid)
 
         outer = QVBoxLayout(self)
         outer.addWidget(scroll)
 
-        self.btn_migrate.clicked.connect(self.run_migration)
+        self.btn_migrate_epic.clicked.connect(lambda: self.run_migration(platform="epic"))
+        self.btn_migrate_steam.clicked.connect(lambda: self.run_migration(platform="steam"))
         self.check_for_set_up()
 
     def check_for_set_up(self):
-        ready = bool(self.rl_manager.save_path and self.rl_manager.backup_path and self.rl_manager.rocket_league_path)
-        self.btn_migrate.setEnabled(ready)
-        if not ready:
-            self.status_label.setText("Status: Please finish setup first.")
-            self.status_label.setStyleSheet("color: #f0b36b;")
-        else:
-            self.status_label.setText("Status: Ready")
-            self.status_label.setStyleSheet("color: #86d07f;")
+        ready_epic = bool(self.rl_manager.save_path_epic and self.rl_manager.rocket_league_path_epic)
+        ready_steam = bool(self.rl_manager.save_path_steam and self.rl_manager.rocket_league_path_steam)
+        self.btn_migrate_steam.setEnabled(ready_steam)
+        self.btn_migrate_epic.setEnabled(ready_epic)
+        if not ready_epic:
+            self.status_label_epic.setText("Status: \nPlease repeat get config at home tab\n or \nvisit Manual Setup tab.")
+            self.status_label_epic.setStyleSheet("color: #f0b36b;")
+        elif ready_epic:
+            self.status_label_epic.setText("Status: Ready")
+            self.status_label_epic.setStyleSheet("color: #86d07f;")
 
-    def log_status(self, text: str, color: str = "#d0d0d8"):
-        self.status_label.setText(text)
-        self.status_label.setStyleSheet(f"color: {color};")
+        if not ready_steam:
+            self.status_label_steam.setText("Status: \nPlease repeat get config at home tab\n or \nvisit Manual Setup tab.")
+            self.status_label_steam.setStyleSheet("color: #f0b36b;")
+        elif ready_steam:
+            self.status_label_steam.setText("Status: Ready")
+            self.status_label_steam.setStyleSheet("color: #86d07f;")
+
+    def log_status(self, platform: str = "steam" or "epic", text: str = "", color: str = "#d0d0d8"):
+        if platform == "steam":
+            self.status_label_steam.setText(text)
+            self.status_label_steam.setStyleSheet(f"color: {color};")
+        elif platform == "epic":
+            self.status_label_epic.setText(text)
+            self.status_label_epic.setStyleSheet(f"color: {color};") 
+        
         QApplication.processEvents()
 
-    def run_migration(self):
-        err = self.rl_manager.check_folder_paths_set()
+    def run_migration(self, platform: str = "steam" or "epic"):
+        err = self.rl_manager.check_folder_paths_set(platform=platform)
+        err2 = self.rl_manager.check_backup_folder_empty()
         if err:
             show_error(self, err)
             return
-        self.log_status("Starting Rocket League and waiting for new save files...", "#f0c36b")
+        if err2:
+            show_error(self, err2)
+            return
+        self.log_status(platform=platform, text="Starting Rocket League and waiting for new save files...", color="#f0c36b")
         try:
-            ok = self.rl_manager.generate_new_save_files()
+            ok = self.rl_manager.generate_new_save_files(mode="replace_existing", platform=platform)
             if ok:
-                self.log_status("Settings migrated successfully!", "#86d07f")
+                self.log_status(platform=platform, text="Settings migrated successfully!", color="#86d07f")
                 QMessageBox.information(self, "Done", "Settings migrated successfully.")
             else:
-                self.log_status("No saves found to migrate.", "#d97777")
+                self.log_status(platform=platform, text="No saves found to migrate.", color="#d97777")
                 QMessageBox.information(self, "Info", "No saves found to migrate.")
         except Exception as e:
-            self.log_status("Error occurred.", "#d97777")
+            self.log_status(platform=platform, text="Error occurred.", color="#d97777")
             show_error(self, str(e))
+
+# --- Setup Tab ---
+class DebugTab(RequiresSetupTab):
+    def __init__(self, rl_manager: RLManager):
+        super().__init__(rl_manager)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        scroll.setWidget(container)
+
+        main = QVBoxLayout(container)
+        main.setContentsMargins(20, 20, 20, 20)
+        main.setSpacing(16)
+        main.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        instr_card = card_frame_widget(
+        "Manual Setup",
+        "Select the Steam and/or Epic Games DBE_Production folders and exe files for Rocket League",
+        notice_text="Manuel setup is only needed if automatic detection fails."
+        )   
+        main.addWidget(instr_card)
+
+        self.save_label_epic = QLabel(f"Epic DBE_Production folder: {elide_path(rl_manager.save_path_epic)}")
+        self.save_label_epic.setToolTip(rl_manager.save_path_epic or "")
+        self.save_label_epic.setWordWrap(True)
+        self.save_label_steam = QLabel(f"Steam DBE_Production folder: {elide_path(rl_manager.save_path_steam)}")
+        self.save_label_steam.setToolTip(rl_manager.save_path_steam or "")
+        self.save_label_steam.setWordWrap(True)
+        
+        self.save_info = QLabel("Default DBE_Production paths \nSteam: C:/Users/<you>/Documents/My Games/Rocket League/TAGame/SaveData/DBE_Production  \nEpic: same to TAGame/SaveDataEpic/DBE_Production")
+        self.save_info.setStyleSheet("color: #bfbfcf; font-size: 12px;")
+
+        self.backup_label = QLabel(f"Backup file locations: {elide_path(rl_manager.backup_path)}")
+        self.backup_label.setToolTip(rl_manager.backup_path or "")
+        self.backup_label.setWordWrap(True)
+
+        self.exe_label_epic = QLabel(f"Epic Rocket League exe: {elide_path(rl_manager.rocket_league_path_epic)}")
+        self.exe_label_epic.setToolTip(rl_manager.rocket_league_path_epic or "")
+        self.exe_label_epic.setWordWrap(True)
+        self.exe_label_steam = QLabel(f"Steam Rocket League exe: {elide_path(rl_manager.rocket_league_path_steam)}")
+        self.exe_label_steam.setToolTip(rl_manager.rocket_league_path_steam or "")
+        self.exe_label_steam.setWordWrap(True)
+        
+        self.exe_info = QLabel("Default exe paths \nSteam: C:/Program Files (x86)/Steam/steamapps/common/rocketleague/Binaries/Win64/RocketLeague.exe  \nEpic: C:/Program Files/Epic Games/rocketleague/Binaries/Win64/RocketLeague.exe")
+        self.exe_info.setStyleSheet("color: #bfbfcf; font-size: 12px;")
+        
+        self.status_label_epic = QLabel("Epic status: ‑")
+        self.status_label_steam = QLabel("Steam status: ‑")
+
+        main.addWidget(self.save_label_epic)
+        main.addWidget(self.save_label_steam)
+        main.addWidget(self.save_info)
+        main.addWidget(self.exe_label_epic)
+        main.addWidget(self.exe_label_steam)
+        main.addWidget(self.exe_info)
+        main.addWidget(self.backup_label)
+
+        btn_grid = QGridLayout()
+        btn_grid.setHorizontalSpacing(12)
+        btn_grid.setVerticalSpacing(10)
+
+        self.btn_choose_save_epic = QPushButton("Choose epic DBE_Production folder")
+        self.btn_choose_save_steam = QPushButton("Choose steam DBE_Production folder")
+        self.btn_choose_exe_epic = QPushButton("Choose epic Rocket League exe")
+        self.btn_choose_exe_steam = QPushButton("Choose steam Rocket League exe")
+
+        btn_grid.addWidget(self.btn_choose_save_epic, 0, 0)
+        btn_grid.addWidget(self.btn_choose_save_steam, 0, 1)
+        btn_grid.addWidget(self.btn_choose_exe_epic, 1, 0)
+        btn_grid.addWidget(self.btn_choose_exe_steam, 1, 1)
+        btn_grid.addWidget(self.status_label_steam, 2, 1)
+        btn_grid.addWidget(self.status_label_epic, 2, 0)
+        btn_grid.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        main.addLayout(btn_grid)
+
+        outer = QVBoxLayout(self)
+        outer.addWidget(scroll)
+
+        self.btn_choose_save_epic.clicked.connect(lambda: self.choose_path("save_epic"))
+        self.btn_choose_save_steam.clicked.connect(lambda: self.choose_path("save_steam"))
+        self.btn_choose_exe_epic.clicked.connect(lambda: self.choose_path("rocket_league_epic"))
+        self.btn_choose_exe_steam.clicked.connect(lambda: self.choose_path("rocket_league_steam"))
+  
+        self.check_for_set_up()
+        
+    
+    def check_for_set_up(self):
+        self.update_all_labels_and_status()
+
+    def _style_status(self, state: str, label: str = "epic" or "steam"):
+        color_map = {
+            "ready": ("#dff7e0", "#2ca84a"),
+            "warning": ("#fff6e0", "#b77b00"),
+            "error": ("#ffe6e6", "#d02a2a"),
+            "incomplete": ("#ededf5", "#7a7aa8")
+        }
+        bg, fg = color_map.get(state, color_map["incomplete"])
+        if label == "epic":
+            self.status_label_epic.setStyleSheet(
+                f"background: {bg}; color: {fg}; border-radius: 8px; padding: 8px; font-weight: 600;"
+            )
+        elif label == "steam":
+            self.status_label_steam.setStyleSheet(
+                f"background: {bg}; color: {fg}; border-radius: 8px; padding: 8px; font-weight: 600;"
+            )
+
+    def update_all_labels_and_status(self):
+        self.save_label_epic.setText(f"Epic DBE_Production folder: {elide_path(self.rl_manager.save_path_epic)}")
+        self.save_label_epic.setToolTip(self.rl_manager.save_path_epic or "")
+        self.save_label_steam.setText(f"Steam DBE_Production folder: {elide_path(self.rl_manager.save_path_steam)}")
+        self.save_label_steam.setToolTip(self.rl_manager.save_path_steam or "")
+        self.exe_label_epic.setText(f"Epic Rocket League exe: {elide_path(self.rl_manager.rocket_league_path_epic)}")
+        self.exe_label_epic.setToolTip(self.rl_manager.rocket_league_path_epic or "")
+        self.exe_label_steam.setText(f"Steam Rocket League exe: {elide_path(self.rl_manager.rocket_league_path_steam)}")
+        self.exe_label_steam.setToolTip(self.rl_manager.rocket_league_path_steam or "")
+
+        save_set_epic = bool(self.rl_manager.save_path_epic)
+        exe_set_epic = bool(self.rl_manager.rocket_league_path_epic)
+        save_set_steam = bool(self.rl_manager.save_path_steam)
+        exe_set_steam = bool(self.rl_manager.rocket_league_path_steam)
+
+        if not (save_set_steam or exe_set_steam):
+            self.status_label_steam.setText("Steam status: Please configure save & exe path.")
+            self._style_status("incomplete", "steam")
+        elif not save_set_steam and exe_set_steam:
+            self.status_label_steam.setText("Steam status: DBE_Production folder missing.")
+            self._style_status("warning", "steam")
+        elif save_set_steam and not exe_set_steam:
+            self.status_label_steam.setText("Steam status: Rocket League exe missing.")
+            self._style_status("warning", "steam")
+        else:
+            self.status_label_steam.setText("Steam status: Ready")
+            self._style_status("ready", "steam")
+
+        if not (save_set_epic or exe_set_epic):
+            self.status_label_epic.setText("Epic status: Please configure save & exe path.")
+            self._style_status("incomplete", "epic")
+        elif not save_set_epic and exe_set_epic:
+            self.status_label_epic.setText("Epic status: DBE_Production folder missing.")
+            self._style_status("warning", "epic")
+        elif save_set_epic and not exe_set_epic:
+            self.status_label_epic.setText("Epic status: Rocket League exe missing.")
+            self._style_status("warning", "epic")
+        else:
+            self.status_label_epic.setText("Epic status: Ready")
+            self._style_status("ready", "epic")
+
+        win = self.window()
+        if hasattr(win, "tabs"):
+            for i in range(win.tabs.count()):
+                w = win.tabs.widget(i)
+                if hasattr(w, "check_for_set_up"):
+                    try:
+                        w.check_for_set_up()
+                    except Exception:
+                        pass
+
+    def choose_path(self, folder_type: str):
+        settings = self.rl_manager.settings
+        if folder_type == "rocket_league_epic" or folder_type == "rocket_league_steam":
+            path, _ = QFileDialog.getOpenFileName(self, "Select Rocket League exe", "", "Executables (*.exe)")
+            if path:
+                if folder_type == "rocket_league_epic":
+                    self.rl_manager.rocket_league_path_epic = path
+                    settings.setValue("rocket_league_path_epic", path)
+                elif folder_type == "rocket_league_steam":
+                    self.rl_manager.rocket_league_path_steam = path
+                    settings.setValue("rocket_league_path_steam", path)
+        else:
+            folder = QFileDialog.getExistingDirectory(self, f"Choose {folder_type} folder")
+            if folder:
+                if folder_type == "save_epic" or folder_type == "save_steam":
+                    if folder_type == "save_epic":
+                        self.rl_manager.save_path_epic = folder
+                        err = self.rl_manager.check_folders_identical(platform="epic")
+                        err2 = self.rl_manager.check_path_contains_save_files(platform="epic")
+                        if err:
+                            self.rl_manager.save_path_epic = ""
+                            show_error(self, err)
+                        elif err2:
+                            self.rl_manager.save_path_epic = ""
+                            show_error(self, err2)
+                        settings.setValue("save_path_epic", self.rl_manager.save_path_epic)
+                    elif folder_type == "save_steam":
+                        self.rl_manager.save_path_steam = folder
+                        err = self.rl_manager.check_folders_identical(platform="steam")
+                        err2 = self.rl_manager.check_path_contains_save_files(platform="steam")
+                        if err:
+                            self.rl_manager.save_path_steam = ""
+                            show_error(self, err)
+                        elif err2:
+                            self.rl_manager.save_path_steam = ""
+                            show_error(self, err2)
+                        settings.setValue("save_path_steam", self.rl_manager.save_path_steam)
+
+        self.update_all_labels_and_status()
