@@ -1,5 +1,6 @@
 import sys
 from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QPalette, QColor
 from gui import RLMainWindow
 from util import RLManager
 
@@ -142,11 +143,27 @@ QScrollArea {
 
 
 def main():
-
-
     rl_manager = RLManager()
     app = QApplication(sys.argv)
+    
+    app.setStyle("Fusion")  
 
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(30, 30, 47))
+    palette.setColor(QPalette.WindowText, QColor(255, 255, 255))
+    palette.setColor(QPalette.Base, QColor(39, 39, 52))
+    palette.setColor(QPalette.AlternateBase, QColor(46, 46, 63))
+    palette.setColor(QPalette.ToolTipBase, QColor(255, 255, 255))
+    palette.setColor(QPalette.ToolTipText, QColor(255, 255, 255))
+    palette.setColor(QPalette.Text, QColor(255, 255, 255))
+    palette.setColor(QPalette.Button, QColor(78, 93, 108))
+    palette.setColor(QPalette.ButtonText, QColor(255, 255, 255))
+    palette.setColor(QPalette.BrightText, QColor(255, 0, 0))
+    palette.setColor(QPalette.Link, QColor(108, 125, 140))
+    palette.setColor(QPalette.Highlight, QColor(78, 93, 108))
+    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    app.setPalette(palette)
+    
     app.setStyleSheet(style)
 
     window = RLMainWindow(rl_manager)
