@@ -43,8 +43,8 @@ class RLManager:
 
     def _check_standard_locations(self, results):
         if sys.platform == "win32":
-            steam_apps_path = Path("C:") / "Program Files (x86)" / "Steam" / "steamapps" / "common" / "rocketleague"
-            epic_apps_path = Path("C:") / "Program Files" / "Epic Games" / "RocketLeague"
+            steam_apps_path = Path(os.getenv("ProgramFiles(x86)")) / "Steam" / "steamapps" / "common" / "rocketleague"
+            epic_apps_path = Path(os.getenv("ProgramFiles")) / "Epic Games" / "rocketleague"
             documents_path = Path.home() / "Documents" / "My Games" / "Rocket League" / "TAGame"
 
             steam_exe = steam_apps_path / "Binaries" / "Win64" / "RocketLeague.exe"
@@ -91,6 +91,8 @@ class RLManager:
             try:
                 for path in root_drive.rglob("DBE_Production"):
                     path_parts_lower = [part.lower() for part in path.parts]
+                    if results["Epic_folder"] and results["Steam_folder"]:
+                        break
                     if "onedrive" in path_parts_lower:
                         continue
                     if "savedataepic" in path_parts_lower:
@@ -104,6 +106,10 @@ class RLManager:
 
                 for path in root_drive.rglob("RocketLeague.exe"):
                     path_parts_lower = [part.lower() for part in path.parts]
+                    if results["Steam_exe"] and results["Epic_exe"]:
+                        break
+                    if "onedrive" in path_parts_lower:
+                        continue
                     if any(l in path_parts_lower for l in ["steamapps", "steam"]):
                         results["Steam_exe"].append(str(path))
                         self.settings.setValue("rocket_league_path_steam", str(path))
