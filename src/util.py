@@ -6,7 +6,7 @@ import glob
 import re
 import shutil
 from PySide6.QtCore import QSettings
-import string
+import sys
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
@@ -31,74 +31,92 @@ class RLManager:
         self.settings.setValue("backup_path", self.backup_path)
     
     def get_rocket_league_locations(self):
-
-        search_paths = ({
-            "Folder": ({"top_folder": "savedata", "sub_folder": "DBE_Production"}),
-            "Exe": ({"top_folder": "rocketleague", "sub_folder": "Binaries/Win64"})
-        })
-    
         results = defaultdict(list)
-        for key, params in search_paths.items():
-            top_folder = params["top_folder"]
-            sub_folder = params["sub_folder"]
-            for drive in string.ascii_uppercase:
-                root_drive = f"{drive}:/"
-                if not os.path.exists(root_drive):
-                    continue
 
-                for root, dirs, files in os.walk(root_drive):
+        found_in_standard = self._check_standard_locations(results)
 
-                    for dir_name in list(dirs):
-                        if not dir_name.lower().startswith(f"{top_folder.lower()}"):
-                            continue
+        if not found_in_standard:
+            print("Standard locations not found. Starting a full drive scan...")
+            self._full_drive_scan(results)
 
-                        save_path = Path(root) / dir_name
-                        # sub_folder can be 'DBE_Production' or 'Binaries/Win64' (as String or Path)
-                        dbe_path = save_path / Path(sub_folder)
-
-                        try:
-                            if not dbe_path.exists():
-                                continue
-                        except (PermissionError, OSError):
-                            continue
-
-                        parts = [p.lower() for p in dbe_path.parts]
-                        if "onedrive" in parts:
-                            continue
-
-                        if key == "Folder":
-                            dn = dir_name.lower()
-                            if "savedataepic" in dn or dn.startswith("savedataepic"):
-                                results["Epic_folder"].append(str(dbe_path))
-                                self.settings.setValue("save_path_epic", str(dbe_path))
-                                self.save_path_epic = str(dbe_path)
-                            elif "savedata" in dn or dn.startswith("savedata"):
-                                results["Steam_folder"].append(str(dbe_path))
-                                self.settings.setValue("save_path_steam", str(dbe_path))
-                                self.save_path_steam = str(dbe_path)
-
-                        elif key == "Exe":
-                            has_win64 = any(p == "win64" for p in parts)
-                            exe_file = dbe_path / "RocketLeague.exe"
-                            if has_win64 or exe_file.is_file() or "binaries" in parts:
-                                if any("steam" in p or "steamapps" in p for p in parts):
-                                    if exe_file.is_file():
-                                        path_to_store = str(exe_file)
-                                    else:
-                                        path_to_store = str(dbe_path)
-                                    results["Steam_exe"].append(path_to_store)
-                                    self.settings.setValue("rocket_league_path_steam", path_to_store)
-                                    self.rocket_league_path_steam = path_to_store
-                                elif any("epic games" in p or "epicgames" in p or p == "epic" for p in parts):
-                                    if exe_file.is_file():
-                                        path_to_store = str(exe_file)
-                                    else:
-                                        path_to_store = str(dbe_path)
-                                    results["Epic_exe"].append(path_to_store)
-                                    self.settings.setValue("rocket_league_path_epic", path_to_store)
-                                    self.rocket_league_path_epic = path_to_store
         return dict(results)
 
+    def _check_standard_locations(self, results):
+        if sys.platform == "win32":
+            steam_apps_path = Path("C:") / "Program Files (x86)" / "Steam" / "steamapps" / "common" / "rocketleague"
+            epic_apps_path = Path("C:") / "Program Files" / "Epic Games" / "RocketLeague"
+            documents_path = Path.home() / "Documents" / "My Games" / "Rocket League" / "TAGame"
+
+            steam_exe = steam_apps_path / "Binaries" / "Win64" / "RocketLeague.exe"
+            if steam_exe.exists():
+                results["Steam_exe"].append(str(steam_exe))
+                self.settings.setValue("rocket_league_path_steam", str(steam_exe))
+                self.rocket_league_path_steam = str(steam_exe)
+
+            epic_exe = epic_apps_path / "Binaries" / "Win64" / "RocketLeague.exe"
+            if epic_exe.exists():
+                results["Epic_exe"].append(str(epic_exe))
+                self.settings.setValue("rocket_league_path_epic", str(epic_exe))
+                self.rocket_league_path_epic = str(epic_exe)
+
+            epic_save_folder = documents_path / "SaveDataEpic" / "DBE_Production"
+            if epic_save_folder.exists():
+                results["Epic_folder"].append(str(epic_save_folder))
+                self.settings.setValue("save_path_epic", str(epic_save_folder))
+                self.save_path_epic = str(epic_save_folder)
+
+            steam_save_folder = documents_path / "SaveData" / "DBE_Production"
+            if steam_save_folder.exists():
+                results["Steam_folder"].append(str(steam_save_folder))
+                self.settings.setValue("save_path_steam", str(steam_save_folder))
+                self.save_path_steam = str(steam_save_folder)
+
+        elif sys.platform.startswith("linux"):
+            pass
+
+        elif sys.platform == "darwin": # macOS 
+            pass
+
+        all_found = len(results["Epic_exe"]) > 0 and len(results["Steam_exe"]) > 0 and \
+                    len(results["Epic_folder"]) > 0 and len(results["Steam_folder"]) > 0
+
+        return all_found
+
+    def _full_drive_scan(self, results):
+        for p in psutil.disk_partitions():
+            root_drive = Path(p.mountpoint)
+            if not root_drive.exists():
+                continue
+
+            try:
+                for path in root_drive.rglob("DBE_Production"):
+                    path_parts_lower = [part.lower() for part in path.parts]
+                    if "onedrive" in path_parts_lower:
+                        continue
+                    if "savedataepic" in path_parts_lower:
+                        results["Epic_folder"].append(str(path))
+                        self.settings.setValue("save_path_epic", str(path))
+                        self.save_path_epic = str(path)
+                    elif "savedata" in path_parts_lower:
+                        results["Steam_folder"].append(str(path))
+                        self.settings.setValue("save_path_steam", str(path))
+                        self.save_path_steam = str(path)
+
+                for path in root_drive.rglob("RocketLeague.exe"):
+                    path_parts_lower = [part.lower() for part in path.parts]
+                    if any(l in path_parts_lower for l in ["steamapps", "steam"]):
+                        results["Steam_exe"].append(str(path))
+                        self.settings.setValue("rocket_league_path_steam", str(path))
+                        self.rocket_league_path_steam = str(path)
+                    elif any(l in path_parts_lower for l in ["epic games", "epicgames"]):
+                        results["Epic_exe"].append(str(path))
+                        self.settings.setValue("rocket_league_path_epic", str(path))
+                        self.rocket_league_path_epic = str(path)
+
+            except (PermissionError, OSError) as e:
+                print(f"Skipping {root_drive} due to error: {e}")
+                continue
+            
     def latest_saves(self, platform: str = "steam" or "epic"):
     
         saves = []
