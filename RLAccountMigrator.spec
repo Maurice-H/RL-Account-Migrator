@@ -16,10 +16,6 @@ elif sys.platform == 'darwin':
 elif sys.platform.startswith("linux"):
     icon_path = './assets/icons/app.png'
 
-app.ico   (für Windows Build)
-app.icns  (für macOS Build - einmalig konvertieren)
-app.png   (für Linux und als Fallback im App-Code)
-
 a = Analysis(
     ['src/main.py'],
     pathex=[],
