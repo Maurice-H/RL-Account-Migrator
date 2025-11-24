@@ -4,7 +4,7 @@ import os
 
 block_cipher = None
 
-# --- OS-SPEZIFISCHE EINSTELLUNGEN ---
+# --- OS-SPECIFIC SETTINGS ---
 icon_path = None
 version_file_path = None
 
@@ -20,7 +20,7 @@ a = Analysis(
     ['src/main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets')],
+    datas=[('assets/icons', 'icons')],,
     hiddenimports=['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets'],
     hookspath=[],
     hooksconfig={},
@@ -83,7 +83,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # --- HIER SIND DIE ÄNDERUNGEN ---
     icon=icon_path,
     version_file=version_file_path,
 )

@@ -9,6 +9,8 @@ from util import RLManager
 import sys
 import os
 from pathlib import Path
+import shutil
+import tempfile
 
 # --- Helper Functions ---
 def show_error(parent, message):
@@ -98,25 +100,44 @@ class RLMainWindow(QMainWindow):
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
-    def get_base_path(self) -> Path:
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            return Path(sys._MEIPASS)
-        else:
-            return Path(os.path.abspath("."))
+    def get_resource_path(relative_path: str) -> str:
 
-    def resource_path(self, relative_path: Path) -> str:
-        return str(self.get_base_path() / relative_path)
+        relative_path = Path(relative_path)
+
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            source_path = Path(sys._MEIPASS) / relative_path
+
+            target_dir = Path(tempfile.gettempdir()) / "RLAccountMigrator_Resources"
+            target_dir.mkdir(exist_ok=True)
+
+            target_path = target_dir / relative_path.name
+
+            if not target_path.exists() or target_path.stat().st_mtime < source_path.stat().st_mtime:
+                try:
+                    (target_dir / relative_path.parent).mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source_path, target_path)
+                    print(f"DEBUG: Resource copied from {source_path} to {target_path}.")
+                except Exception as e:
+                    print(f"ERROR copying resource: {e}")
+                    return str(source_path)
+
+            return str(target_path)
+        else:
+            return str(Path(os.path.abspath(".")) / relative_path)
 
     def setIcons(self):
-        relative_icon_path = Path("assets") / "icons" / "app.png"
-        
-        icon_path_str = self.resource_path(relative_icon_path)
+        relative_icon_path = Path("icons") / "app.png"
+        icon_path_str = self.get_resource_path(os.path.join(*relative_icon_path.parts))        
         
         icon = QIcon(icon_path_str)
 
-        self.setWindowIcon(icon)
+        print(f"DEBUG: Final load path:{icon_path_str}")
+        if icon.isNull():
+             print("ERROR: QIcon could NOT load file from the final path.")
         
-        QApplication.instance().setWindowIcon(icon) 
+        if not icon.isNull():
+            self.setWindowIcon(icon)
+            QApplication.instance().setWindowIcon(icon)
 
     def on_tab_changed(self, index: int):
         widget = self.tabs.widget(index)
