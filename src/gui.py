@@ -108,7 +108,7 @@ class RLMainWindow(QMainWindow):
         return str(self.get_base_path() / relative_path)
 
     def setIcons(self):
-        relative_icon_path = Path("assets") / "icons" / "app.ico"
+        relative_icon_path = Path("assets") / "icons" / "app.png"
         
         icon_path_str = self.resource_path(relative_icon_path)
         
