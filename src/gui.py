@@ -123,7 +123,6 @@ class RLMainWindow(QMainWindow):
             if not target_path.exists() or target_path.stat().st_mtime < source_path.stat().st_mtime:
                 try:
                     shutil.copy2(source_path, target_path) 
-                    print(f"DEBUG: Resource copied from {source_path} to {target_path}.")
                 except Exception as e:
                     print(f"ERROR copying resource: {e}")
                     return str(source_path)
@@ -137,7 +136,6 @@ class RLMainWindow(QMainWindow):
         
         icon = QIcon(icon_path_str)
 
-        print(f"DEBUG: Final load path:{icon_path_str}")
         if icon.isNull():
              print("ERROR: QIcon could NOT load file from the final path.")
         
