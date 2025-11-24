@@ -100,7 +100,7 @@ class RLMainWindow(QMainWindow):
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
     
-    def get_resource_path(self, relative_path: str) -> str:
+    def get_resource_path(self) -> str:
         relative_icon_path = Path("assets") / "icons" / "app.png"
 
         if sys.platform == "win32":
@@ -112,28 +112,25 @@ class RLMainWindow(QMainWindow):
 
         path = os.path.join(*relative_icon_path.parts)
 
-        relative_path = Path(relative_path)
+        relative_path = Path(path)
 
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             source_path = Path(sys._MEIPASS) / relative_path
-
             target_dir = Path(tempfile.gettempdir()) / "RLAccountMigrator_Resources"
             target_dir.mkdir(exist_ok=True)
-
-            target_path = target_dir / relative_path.name
-
+            target_path = target_dir / relative_path
+            target_path.parent.mkdir(parents=True, exist_ok=True)
             if not target_path.exists() or target_path.stat().st_mtime < source_path.stat().st_mtime:
                 try:
-                    (target_dir / relative_path.parent).mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(source_path, target_path)
+                    shutil.copy2(source_path, target_path) 
                     print(f"DEBUG: Resource copied from {source_path} to {target_path}.")
                 except Exception as e:
                     print(f"ERROR copying resource: {e}")
                     return str(source_path)
-
-            return str(target_path)
+                               
+            return str(target_path).replace("\\", "/") 
         else:
-            return str(Path(os.path.abspath(".")) / relative_path)
+            return str(Path(os.path.abspath(".")) / relative_path).replace("\\", "/")
 
     def setIcons(self):
         icon_path_str = self.get_resource_path()        
