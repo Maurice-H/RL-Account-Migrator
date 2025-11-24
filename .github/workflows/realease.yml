@@ -88,25 +88,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     env:
       VERSION: ${{ needs.build-and-package.outputs.version }}
       SHORT_SHA: ${{ needs.build-and-package.outputs.short_sha }}
-      BETA_TAG_NAME: beta-${{ github.ref_name }}
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifacts
-          pattern: build-*
-          merge-multiple: false
+      BETA_TAG_NAME: beta-${{ github.ref_name }} # Tag Name bleibt unkodiert
 
-      - name: Rename and Prepare
+    steps:
+      - name: URL-Encode Branch Name 🔗
+        id: url_encode
+        shell: bash
         run: |
-          mkdir release
-          mv artifacts/build-windows/${{ env.EXE_BASENAME }}.exe release/${{ env.EXE_BASENAME }}.exe
-          mv artifacts/build-linux/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-linux
-          mv artifacts/build-macos/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-macos
-          chmod +x release/*-linux release/*-macos
+          # Performs URL encoding (replaces / with %2F, # with %23 etc.)
+          ENCODED_REF_NAME=$(python -c "import urllib.parse; print(urllib.parse.quote('${{ github.ref_name }}', safe=''))")
+          echo "ENCODED_REF_NAME=$ENCODED_REF_NAME" >> $GITHUB_ENV
 
       - name: Create Beta Release
         uses: softprops/action-gh-release@v2
@@ -116,15 +111,14 @@ jobs:
           prerelease: true
           files: release/*
           body: |
-            🧪 **Multi-OS Beta-Build** von Branch `${{ github.ref_name }}  
+            🧪 **Multi-OS Beta-Build** von Branch `${{ github.ref_name }}`
+
             ---
 
-            **Branch:** [${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/tree/${{ github.ref_name }})
+            **Branch:** [${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/tree/${{ env.ENCODED_REF_NAME }})
             **Commit:** [${{ env.SHORT_SHA }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ env.SHORT_SHA }})
 
             ---
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
   official-release:
     name: Official Release
