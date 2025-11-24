@@ -13,7 +13,7 @@ if sys.platform == 'win32':
     version_file_path = 'version.txt'
 elif sys.platform == 'darwin':
     icon_path = './assets/icons/app.icns'
-elif sys.platform.startswith("linux")
+elif sys.platform.startswith("linux"):
     icon_path = './assets/icons/app.png'
 
 app.ico   (für Windows Build)
