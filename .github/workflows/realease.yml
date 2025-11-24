@@ -86,6 +86,8 @@ jobs:
     needs: build-and-package
     if: github.ref_name != 'main' && !startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       VERSION: ${{ needs.build-and-package.outputs.version }}
       SHORT_SHA: ${{ needs.build-and-package.outputs.short_sha }}
@@ -122,6 +124,8 @@ jobs:
     needs: build-and-package
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       TAG: ${{ github.ref_name }}
       VERSION: ${{ needs.build-and-package.outputs.version }}
