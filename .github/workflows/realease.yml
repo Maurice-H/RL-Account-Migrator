@@ -116,8 +116,15 @@ jobs:
           prerelease: true
           files: release/*
           body: |
-            🧪 **Multi-OS Beta-Build** von Branch `${{ github.ref_name }}`
-            Commit: `${{ env.SHORT_SHA }}`
+            🧪 **Multi-OS Beta-Build** von Branch `${{ github.ref_name }}  
+            ---
+
+            **Branch:** [${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/tree/${{ github.ref_name }})
+            **Commit:** [${{ env.SHORT_SHA }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ env.SHORT_SHA }})
+
+            ---
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
   official-release:
     name: Official Release
