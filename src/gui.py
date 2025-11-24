@@ -99,8 +99,18 @@ class RLMainWindow(QMainWindow):
         self.tabs.addTab(self.setup_tab, "Manual Setup")
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
+    
+    def get_resource_path(self, relative_path: str) -> str:
+        relative_icon_path = Path("assets") / "icons" / "app.png"
 
-    def get_resource_path(relative_path: str) -> str:
+        if sys.platform == "win32":
+            relative_icon_path = Path("assets") / "icons" / "app.ico"            
+        elif sys.platform.startswith("linux"):
+            relative_icon_path = Path("assets") / "icons" / "app.png"
+        elif sys.platform == "darwin": # macOS 
+            relative_icon_path = Path("assets") / "icons" / "app.icns"
+
+        path = os.path.join(*relative_icon_path.parts)
 
         relative_path = Path(relative_path)
 
@@ -126,8 +136,7 @@ class RLMainWindow(QMainWindow):
             return str(Path(os.path.abspath(".")) / relative_path)
 
     def setIcons(self):
-        relative_icon_path = Path("icons") / "app.png"
-        icon_path_str = self.get_resource_path(os.path.join(*relative_icon_path.parts))        
+        icon_path_str = self.get_resource_path()        
         
         icon = QIcon(icon_path_str)
 
