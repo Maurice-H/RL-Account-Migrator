@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from util import RLManager
 import sys
 import os
+from pathlib import Path
 
 # --- Helper Functions ---
 def show_error(parent, message):
@@ -97,20 +98,25 @@ class RLMainWindow(QMainWindow):
 
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
-    def resource_path(self, relative_path):
-        try:
-            base_path = sys._MEIPASS
-        except Exception:
-            base_path = os.path.abspath(".")
+    def get_base_path(self) -> Path:
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            return Path(sys._MEIPASS)
+        else:
+            return Path(os.path.abspath("."))
 
-        return os.path.join(base_path, relative_path)
+    def resource_path(self, relative_path: Path) -> str:
+        return str(self.get_base_path() / relative_path)
 
     def setIcons(self):
-        icon_path = self.resource_path(os.path.join("assets", "icons", "app.ico")) 
+        relative_icon_path = Path("assets") / "icons" / "app.ico"
         
-        self.setWindowIcon(QIcon(icon_path))
+        icon_path_str = self.resource_path(relative_icon_path)
         
-        QApplication.instance().setWindowIcon(QIcon(icon_path))
+        icon = QIcon(icon_path_str)
+
+        self.setWindowIcon(icon)
+        
+        QApplication.instance().setWindowIcon(icon) 
 
     def on_tab_changed(self, index: int):
         widget = self.tabs.widget(index)
