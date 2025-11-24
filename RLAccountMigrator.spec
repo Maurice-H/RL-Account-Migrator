@@ -1,6 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
+import sys
+import os
 
 block_cipher = None
+
+# --- OS-SPEZIFISCHE EINSTELLUNGEN ---
+icon_path = None
+version_file_path = None
+
+if sys.platform == 'win32':
+    icon_path = './assets/icons/app.ico'
+    version_file_path = 'version.txt'
+elif sys.platform == 'darwin':
+    icon_path = './assets/icons/app.icns'
+elif sys.platform.startswith("linux")
+    icon_path = './assets/icons/app.png'
+
+app.ico   (für Windows Build)
+app.icns  (für macOS Build - einmalig konvertieren)
+app.png   (für Linux und als Fallback im App-Code)
 
 a = Analysis(
     ['src/main.py'],
@@ -69,7 +87,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='./assets/icons/app.ico',
-    version_file='version.txt',
+    # --- HIER SIND DIE ÄNDERUNGEN ---
+    icon=icon_path,
+    version_file=version_file_path,
 )
-
