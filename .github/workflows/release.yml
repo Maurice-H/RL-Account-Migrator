@@ -1,0 +1,203 @@
+name: Build & Release Multi-OS
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "v*.*.*"
+
+env:
+  PYTHON_VERSION: "3.12"
+  EXE_BASENAME: RLAccountMigrator
+  POETRY_VERSION: "1.8.2"
+
+jobs:
+  build-and-package:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            exe_ext: .exe
+            artifact_suffix: windows
+          - os: ubuntu-latest
+            exe_ext: ""
+            artifact_suffix: linux
+          - os: macos-latest
+            exe_ext: ""
+            artifact_suffix: macos
+
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Visual C++ Redistributable (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: choco install vcredist140
+
+      - name: Install Linux Libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libdbus-1-3
+
+      - name: Install Poetry
+        run: pip install poetry==${{ env.POETRY_VERSION }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: Read version and generate metadata
+        id: meta
+        shell: bash
+        run: |
+          version=$(poetry version --short)
+          short_sha=$(git rev-parse --short HEAD)
+          echo "version=$version" >> $GITHUB_OUTPUT
+          echo "short_sha=$short_sha" >> $GITHUB_OUTPUT
+
+      - name: Create Version File (Windows only)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "${{ steps.meta.outputs.version }}" > version.txt
+
+      - name: Clean Build Environment
+        shell: bash
+        run: |
+          rm -rf build dist
+
+      - name: Build with PyInstaller
+        run: |
+          poetry run pyinstaller RLAccountMigrator.spec --clean --noconfirm
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.artifact_suffix }}
+          path: dist/${{ env.EXE_BASENAME }}${{ matrix.exe_ext }}
+
+  beta-release-per-branch:
+    name: "Beta Release"
+    needs: build-and-package
+    if: github.ref_name != 'main' && !startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      VERSION: ${{ needs.build-and-package.outputs.version }}
+      SHORT_SHA: ${{ needs.build-and-package.outputs.short_sha }}
+      BETA_TAG_NAME: beta-${{ github.ref_name }}
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          pattern: build-*
+          merge-multiple: false
+
+      - name: Prepare Beta Files
+        run: |
+          mkdir release
+
+          # Windows
+          if [ -f artifacts/build-windows/${{ env.EXE_BASENAME }}.exe ]; then
+            mv artifacts/build-windows/${{ env.EXE_BASENAME }}.exe release/${{ env.EXE_BASENAME }}-windows.exe
+          fi
+
+          # Linux
+          if [ -f artifacts/build-linux/${{ env.EXE_BASENAME }} ]; then
+            mv artifacts/build-linux/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-linux
+            chmod +x release/${{ env.EXE_BASENAME }}-linux
+          fi
+
+          # MacOS
+          if [ -f artifacts/build-macos/${{ env.EXE_BASENAME }} ]; then
+            mv artifacts/build-macos/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-macos
+            chmod +x release/${{ env.EXE_BASENAME }}-macos
+          fi
+
+      - name: URL-Encode Branch Name 🔗
+        id: url_encode
+        shell: bash
+        run: |
+          ENCODED_REF_NAME=$(python -c "import urllib.parse; print(urllib.parse.quote('${{ github.ref_name }}', safe=''))")
+          echo "ENCODED_REF_NAME=$ENCODED_REF_NAME" >> $GITHUB_ENV
+
+      - name: Create Beta Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.BETA_TAG_NAME }}
+          name: Beta ${{ env.VERSION }} (${{ github.ref_name }})
+          prerelease: true
+          files: release/*
+          body: |
+            🧪 **Multi-OS Beta-Build** von Branch `${{ github.ref_name }}`
+
+            ---
+
+            **Branch:** [${{ github.ref_name }}](${{ github.server_url }}/${{ github.repository }}/tree/${{ env.ENCODED_REF_NAME }})
+            **Commit:** [${{ env.SHORT_SHA }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ env.SHORT_SHA }})
+
+            ---
+
+  official-release:
+    name: Official Release
+    needs: build-and-package
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.build-and-package.outputs.version }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          pattern: build-*
+          merge-multiple: false
+
+      - name: Prepare Official Files
+        run: |
+          mkdir release
+
+          # Windows
+          mv artifacts/build-windows/${{ env.EXE_BASENAME }}.exe release/${{ env.EXE_BASENAME }}-${{ env.VERSION }}-win64.exe
+
+          # Linux
+          mv artifacts/build-linux/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-${{ env.VERSION }}-linux
+          chmod +x release/${{ env.EXE_BASENAME }}-${{ env.VERSION }}-linux
+
+          # MacOS
+          mv artifacts/build-macos/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-${{ env.VERSION }}-macos
+          chmod +x release/${{ env.EXE_BASENAME }}-${{ env.VERSION }}-macos
+
+          # Checksums
+          cd release
+          sha256sum * > checksums.txt
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          files: release/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
