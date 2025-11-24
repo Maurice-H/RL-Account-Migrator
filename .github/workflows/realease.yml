@@ -44,6 +44,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install Visual C++ Redistributable (Windows)
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: choco install vcredist140
+
       - name: Install Linux Libraries
         if: runner.os == 'Linux'
         run: |
@@ -67,13 +72,17 @@ jobs:
 
       - name: Create Version File (Windows only)
         if: runner.os == 'Windows'
+        shell: bash
+        run: echo "${{ steps.meta.outputs.version }}" > version.txt
+
+      - name: Clean Build Environment
+        shell: bash
         run: |
-          # Hier dein Skript zum Erstellen der version.txt einfügen
-          # Oder sicherstellen, dass es existiert
+          rm -rf build dist
 
       - name: Build with PyInstaller
         run: |
-          poetry run pyinstaller RLAccountMigrator.spec
+          poetry run pyinstaller RLAccountMigrator.spec --clean --noconfirm
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -92,14 +101,41 @@ jobs:
     env:
       VERSION: ${{ needs.build-and-package.outputs.version }}
       SHORT_SHA: ${{ needs.build-and-package.outputs.short_sha }}
-      BETA_TAG_NAME: beta-${{ github.ref_name }} # Tag Name bleibt unkodiert
+      BETA_TAG_NAME: beta-${{ github.ref_name }}
 
     steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          pattern: build-*
+          merge-multiple: false
+
+      - name: Prepare Beta Files
+        run: |
+          mkdir release
+
+          # Windows
+          if [ -f artifacts/build-windows/${{ env.EXE_BASENAME }}.exe ]; then
+            mv artifacts/build-windows/${{ env.EXE_BASENAME }}.exe release/${{ env.EXE_BASENAME }}-windows.exe
+          fi
+
+          # Linux
+          if [ -f artifacts/build-linux/${{ env.EXE_BASENAME }} ]; then
+            mv artifacts/build-linux/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-linux
+            chmod +x release/${{ env.EXE_BASENAME }}-linux
+          fi
+
+          # MacOS
+          if [ -f artifacts/build-macos/${{ env.EXE_BASENAME }} ]; then
+            mv artifacts/build-macos/${{ env.EXE_BASENAME }} release/${{ env.EXE_BASENAME }}-macos
+            chmod +x release/${{ env.EXE_BASENAME }}-macos
+          fi
+
       - name: URL-Encode Branch Name 🔗
         id: url_encode
         shell: bash
         run: |
-          # Performs URL encoding (replaces / with %2F, # with %23 etc.)
           ENCODED_REF_NAME=$(python -c "import urllib.parse; print(urllib.parse.quote('${{ github.ref_name }}', safe=''))")
           echo "ENCODED_REF_NAME=$ENCODED_REF_NAME" >> $GITHUB_ENV
 
